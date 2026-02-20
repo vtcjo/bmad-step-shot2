@@ -1,24 +1,24 @@
 // Minimal server-side runner: executes JSON-formatted Selenium steps or falls back to simulation.
 // This module intentionally imports server-side only dependencies.
 
-import type { ScriptSpec, StepResult } from '../types';
+import type { ScriptSpec, StepResult, StepDef } from '../types';
 import 'chromedriver'; // ensure chromedriver binary is registered for selenium
 import { By, Builder } from 'selenium-webdriver';
 import chrome from 'selenium-webdriver/chrome';
 import { generatePlaceholder } from './simulation';
 
-type Step = { action: string; target?: string; selector?: { type: 'css'|'xpath'; value: string } };
+type Step = StepDef;
 
 export async function executeScript(script: ScriptSpec): Promise<{ results: StepResult[]; mode: 'driver'|'simulation' }> {
   const results: StepResult[] = [];
   let driver: any = null;
   let usingSim = false;
+  let seleniumMod: any = null;
 
   // Attempt to initialize real WebDriver (Chrome)
   try {
-    // Dynamic import pattern to ensure this runs server-side only
-    // @ts-ignore
     const selenium = await import('selenium-webdriver');
+    seleniumMod = selenium;
     const chromeModule = await import('selenium-webdriver/chrome');
     const options = new chromeModule.Options();
     options.addArguments('--headless', '--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu');
@@ -42,12 +42,7 @@ export async function executeScript(script: ScriptSpec): Promise<{ results: Step
 
     try {
       if (!usingSim) {
-        // Real WebDriver flow (basic subset for MVP)
-        // Re-import types to satisfy TS in this isolated file
-        // @ts-ignore
-        const selenium = await import('selenium-webdriver');
-        const ByLocal = selenium.By;
-
+        const ByLocal = seleniumMod?.By ?? By;
         switch (step.action) {
           case 'navigate':
             if (step.target) {
@@ -57,17 +52,38 @@ export async function executeScript(script: ScriptSpec): Promise<{ results: Step
           case 'click':
             if (step.selector?.value) {
               const value = step.selector.value;
-              const type = step.selector.type ?? 'css';
+              const type = (step.selector.type ?? 'css') as 'css'|'xpath';
               const by = type === 'css' ? ByLocal.css(value) : ByLocal.xpath(value);
               const el = await (driver as any).findElement(by);
               await el.click();
             }
             break;
-          // Extend with more actions as needed
+          case 'type':
+            if (step.selector?.value && typeof (step as any).value === 'string') {
+              const value = (step as any).value;
+              const type = (step.selector.type ?? 'css') as 'css'|'xpath';
+              const by = type === 'css' ? ByLocal.css(step.selector.value) : ByLocal.xpath(step.selector.value);
+              const el = await (driver as any).findElement(by);
+              await el.clear();
+              await el.sendKeys(value);
+            }
+            break;
+          case 'select':
+            if (step.selector?.value && typeof (step.value) === 'string') {
+              const by = (step.selector.type ?? 'css') === 'css'
+                ? ByLocal.css(step.selector.value)
+                : ByLocal.xpath(step.selector.value);
+              const selectEl = await (driver as any).findElement(by);
+              // Try to select option by value attribute
+              const option = await selectEl.findElement(ByLocal.xpath(`.//option[@value='${step.value}']`));
+              await option.click();
+            }
+            break;
           default:
-            // Unknown action: mark as skipped (not failing MVP)
+            // Unknown action: ignore for MVP
             break;
         }
+
         result.status = 'passed';
       } else {
         // Simulation path

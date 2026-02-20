@@ -1,7 +1,8 @@
 export type StepDef = {
   action: string;
   target?: string;
-  selector?: { type: 'css' | 'xpath'; value: string };
+  selector?: { type: 'css'|'xpath'; value: string };
+  value?: string;
 };
 
 export type ScriptSpec = {
