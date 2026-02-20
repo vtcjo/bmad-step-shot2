@@ -2,20 +2,19 @@
 // This module intentionally imports server-side only dependencies.
 
 import type { ScriptSpec, StepResult } from '../types';
-import { default as pathModule } from 'path';
-import { promises as fs } from 'fs';
-import { generatePlaceholder } from './simulation';
-import { By, Builder, ThenableWebDriver, WebElement, until } from 'selenium-webdriver';
+import 'chromedriver'; // ensure chromedriver binary is registered for selenium
+import { By, Builder } from 'selenium-webdriver';
 import chrome from 'selenium-webdriver/chrome';
+import { generatePlaceholder } from './simulation';
 
 type Step = { action: string; target?: string; selector?: { type: 'css'|'xpath'; value: string } };
 
-export async function executeScript(script: ScriptSpec): Promise<StepResult[]> {
+export async function executeScript(script: ScriptSpec): Promise<{ results: StepResult[]; mode: 'driver'|'simulation' }> {
   const results: StepResult[] = [];
-  let driver: Any = null;
+  let driver: any = null;
   let usingSim = false;
 
-  // Try to initialize real WebDriver (Chrome)
+  // Attempt to initialize real WebDriver (Chrome)
   try {
     // Dynamic import pattern to ensure this runs server-side only
     // @ts-ignore
@@ -25,7 +24,7 @@ export async function executeScript(script: ScriptSpec): Promise<StepResult[]> {
     options.addArguments('--headless', '--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu');
     driver = new Builder().forBrowser('chrome').setChromeOptions(options).build();
   } catch (e) {
-    // Fallback to simulation
+    // Fallback to simulation if WebDriver is not available
     usingSim = true;
   }
 
@@ -119,7 +118,8 @@ export async function executeScript(script: ScriptSpec): Promise<StepResult[]> {
     }
   }
 
-  return results;
+  const mode: 'driver'|'simulation' = usingSim ? 'simulation' : 'driver';
+  return { results, mode };
 }
 
 // Expose a small helper for tests or UI

@@ -23,3 +23,8 @@ export type RunReport = {
   name?: string;
   steps: StepResult[];
 };
+
+export type RunExecution = {
+  results: StepResult[];
+  mode: 'driver' | 'simulation';
+};

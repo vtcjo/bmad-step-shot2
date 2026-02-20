@@ -26,7 +26,7 @@ type RunResponse = {
   name?: string;
   json?: any;
   htmlUrl?: string;
-  jsonUrl?: string;
+  mode?: string;
 };
 
 const defaultScript: ScriptSpec = {
@@ -43,12 +43,14 @@ export default function Home() {
   const [steps, setSteps] = useState<StepResult[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [liveName, setLiveName] = useState<string>(defaultScript.name ?? "Demo Run");
+  const [mode, setMode] = useState<string | null>(null);
 
   const runScript = async () => {
     setErr(null);
     setRunning(true);
     setRunId(null);
     setSteps([]);
+    setMode(null);
     try {
       const parsed = JSON.parse(scriptText) as ScriptSpec;
       const resp = await fetch('/api/run', {
@@ -65,6 +67,7 @@ export default function Home() {
       setSteps(data.steps);
       // Update optional name
       if (data.name) setLiveName(data.name);
+      if (data.mode) setMode(data.mode);
     } catch (e: any) {
       setErr(e?.message ?? 'Unknown error');
     } finally {
@@ -110,6 +113,11 @@ export default function Home() {
             {running ? 'Running...' : 'Run Script'}
           </button>
           <span className="text-sm text-gray-600">Target: local app at http://localhost:3000/</span>
+          {mode && (
+            <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded text-xs bg-gray-100 text-gray-800">
+              Mode: {mode.toUpperCase()}
+            </span>
+          )}
         </div>
 
         {err && <div className="p-2 mb-4 text-sm text-red-700 bg-red-100 rounded">{err}</div>}

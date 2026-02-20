@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import path from 'path';
 import { promises as fs } from 'fs';
-import { ScriptSpec, StepResult } from '../../types';
+import { ScriptSpec, StepResult, RunExecution } from '../../types';
 import { executeScript } from '../../lib/runner';
 import { generateHtmlReport } from '../../lib/report';
 
@@ -30,22 +30,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Run the script using server-side runner (driver or simulation)
   const runId = `run_${Date.now()}`;
-  let results: StepResult[] = [];
+  let execution: RunExecution;
 
   try {
-    results = await executeScript(script);
+    execution = await executeScript(script);
   } catch (e: any) {
     // Ensure we return something meaningful
-    results = [
-      {
-        index: 0,
-        action: script.steps?.[0]?.action ?? 'unknown',
-        status: 'failed',
-        duration: 0,
-        error: e?.message ?? 'Runner error'
-      }
-    ];
+    const errorResult: StepResult = {
+      index: 0,
+      action: script.steps?.[0]?.action ?? 'unknown',
+      status: 'failed',
+      duration: 0,
+      error: e?.message ?? 'Runner error'
+    };
+    execution = {
+      results: [errorResult],
+      mode: 'simulation'
+    };
   }
+
+  const results = execution.results;
+  const mode = execution.mode;
 
   // Persist a simple JSON report and an HTML report for download
   const reportsDir = path.resolve(process.cwd(), 'reports');
@@ -56,17 +61,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const reportObj = {
     id: runId,
     name: script.name ?? 'Run',
+    mode,
     steps: results
   };
 
   await fs.writeFile(jsonPath, JSON.stringify(reportObj, null, 2), 'utf8');
   // HTML report generation for quick human-readable artifact
-  const htmlContent = generateHtmlReport(reportObj);
+  const htmlContent = generateHtmlReport(reportObj as any);
   await fs.writeFile(htmlPath, htmlContent, 'utf8');
 
   res.status(200).json({
     runId,
     name: script.name ?? 'Run',
+    mode,
     steps: results,
     jsonUrl: `/api/reports/${runId}?format=json`,
     htmlUrl: `/api/reports/${runId}?format=html`
